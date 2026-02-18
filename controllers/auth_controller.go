@@ -11,7 +11,6 @@ import (
 )
 
 func LoginController(w http.ResponseWriter, r *http.Request) {
-	log.Println("methodnya", r.Method)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -28,9 +27,6 @@ func LoginController(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
-
-	log.Println("user name controller:", req.Username)
-	log.Println("password controller:", req.Password)
 
 	if req.Username == "" || req.Password == "" {
 		http.Error(w, "username and password are required", http.StatusBadRequest)

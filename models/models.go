@@ -20,8 +20,9 @@ type RaceRequest struct {
 }
 
 type RaceResult struct {
-	CodeResponse int `json:"code_response"`
-	CountCode    int `json:"count_code"`
+	CodeResponse int    `json:"code_response"`
+	CountCode    int    `json:"count_code"`
+	StatusText   string `json:"status_text"`
 }
 
 type RaceSummaryResponse struct {

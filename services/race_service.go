@@ -71,9 +71,14 @@ func ExecuteRaceTest(req models.RaceRequest) models.RaceSummaryResponse {
 
 	results := make([]models.RaceResult, 0, len(resultMap))
 	for code, count := range resultMap {
+		statusText := http.StatusText(code)
+		if statusText == "" {
+			statusText = "Unknown Status"
+		}
 		results = append(results, models.RaceResult{
 			CodeResponse: code,
 			CountCode:    count,
+			StatusText:   statusText,
 		})
 	}
 
