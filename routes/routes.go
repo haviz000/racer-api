@@ -8,6 +8,10 @@ import (
 )
 
 func RegisterRoutes() {
-	http.HandleFunc("/login", controllers.LoginController)
-	http.HandleFunc("/race-test", middlewares.JWTAuth(controllers.RaceTestController))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/login", controllers.LoginController)
+	mux.HandleFunc("/race-test", middlewares.JWTAuth(controllers.RaceTestController))
+
+	handler := middlewares.CORS(mux)
+	http.Handle("/", handler)
 }
