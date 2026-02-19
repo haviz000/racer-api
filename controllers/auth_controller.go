@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/haviz000/racer-api/models"
@@ -23,7 +22,6 @@ func LoginController(w http.ResponseWriter, r *http.Request) {
 
 	var req models.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Println("decode error:", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}

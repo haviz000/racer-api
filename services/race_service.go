@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -19,9 +20,14 @@ func ExecuteRaceTest(req models.RaceRequest) models.RaceSummaryResponse {
 	sem := make(chan struct{}, req.Concurrent)
 
 	resultMap := make(map[int]int)
+	errorMap := make(map[int]string)
+	bodyMap := make(map[int]string)
 	var mu sync.Mutex
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	start := time.Now()
 
 	for i := 0; i < req.Total; i++ {
@@ -38,6 +44,9 @@ func ExecuteRaceTest(req models.RaceRequest) models.RaceSummaryResponse {
 			if err != nil {
 				mu.Lock()
 				resultMap[0]++
+				if _, exists := errorMap[0]; !exists {
+					errorMap[0] = err.Error()
+				}
 				mu.Unlock()
 				return
 			}
@@ -59,8 +68,17 @@ func ExecuteRaceTest(req models.RaceRequest) models.RaceSummaryResponse {
 			}
 			defer resp.Body.Close()
 
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			bodyStr := string(bodyBytes)
+
 			mu.Lock()
 			resultMap[resp.StatusCode]++
+			if _, exists := bodyMap[resp.StatusCode]; !exists {
+				if len(bodyStr) > 1000 {
+					bodyStr = bodyStr[:1000] + "...(truncated)"
+				}
+				bodyMap[resp.StatusCode] = bodyStr
+			}
 			mu.Unlock()
 		}(i)
 	}
@@ -72,13 +90,21 @@ func ExecuteRaceTest(req models.RaceRequest) models.RaceSummaryResponse {
 	results := make([]models.RaceResult, 0, len(resultMap))
 	for code, count := range resultMap {
 		statusText := http.StatusText(code)
+
+		if code == 0 {
+			statusText = "Network / Request Error"
+		}
+
 		if statusText == "" {
 			statusText = "Unknown Status"
 		}
+
 		results = append(results, models.RaceResult{
 			CodeResponse: code,
-			CountCode:    count,
 			StatusText:   statusText,
+			CountCode:    count,
+			ErrorSample:  errorMap[code],
+			BodySample:   bodyMap[code],
 		})
 	}
 
