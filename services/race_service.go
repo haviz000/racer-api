@@ -2,9 +2,13 @@ package services
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
+	"fmt"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -39,8 +43,72 @@ func ExecuteRaceTest(req models.RaceRequest) models.RaceSummaryResponse {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			body, _ := json.Marshal(req.Payload)
-			httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBuffer(body))
+			var bodyBuffer *bytes.Buffer
+			var contentType string
+
+			if req.BodyType == "form-data" {
+				bodyBuffer = &bytes.Buffer{}
+				writer := multipart.NewWriter(bodyBuffer)
+
+				for key, value := range req.Payload {
+					// Check if value is a map and has _type == "file"
+					if valMap, ok := value.(map[string]any); ok {
+						if typeVal, ok := valMap["_type"].(string); ok && typeVal == "file" {
+							// It's a file!
+							filename, _ := valMap["filename"].(string)
+							contentBase64, _ := valMap["content"].(string)
+							
+							if filename != "" && contentBase64 != "" {
+								// Decode base64
+								decodedBytes, err := base64.StdEncoding.DecodeString(contentBase64)
+								if err != nil {
+									// convert to standard string if decode fails, or just log/ignore?
+									// for now treat as string
+									valStr := fmt.Sprintf("%v", value)
+									_ = writer.WriteField(key, valStr)
+								} else {
+									part, err := writer.CreateFormFile(key, filename)
+									if err == nil {
+										part.Write(decodedBytes)
+									}
+								}
+								continue // Skip default string handling
+							}
+						} else if typeVal, ok := valMap["_type"].(string); ok && typeVal == "file_path" {
+							// It's a local file path!
+							path, _ := valMap["path"].(string)
+							if path != "" {
+								file, err := os.Open(path)
+								if err == nil {
+									defer file.Close()
+									// Use filepath base as filename
+									stat, _ := file.Stat()
+									part, err := writer.CreateFormFile(key, stat.Name())
+									if err == nil {
+										io.Copy(part, file)
+									}
+								} else {
+									fmt.Printf("Error opening file %s: %v\n", path, err)
+								}
+								continue
+							}
+						}
+					}
+
+					// Handle different types if necessary, for now assume string or convert to string
+					valStr := fmt.Sprintf("%v", value)
+					_ = writer.WriteField(key, valStr)
+				}
+				writer.Close()
+				contentType = writer.FormDataContentType()
+			} else {
+				// Default JSON
+				jsonBody, _ := json.Marshal(req.Payload)
+				bodyBuffer = bytes.NewBuffer(jsonBody)
+				contentType = "application/json"
+			}
+
+			httpReq, err := http.NewRequest(req.Method, req.URL, bodyBuffer)
 			if err != nil {
 				mu.Lock()
 				resultMap[0]++
@@ -51,7 +119,17 @@ func ExecuteRaceTest(req models.RaceRequest) models.RaceSummaryResponse {
 				return
 			}
 
+			// Set Content-Type if not already set or override based on body type
+			if contentType != "" {
+				httpReq.Header.Set("Content-Type", contentType)
+			}
+
 			for k, v := range req.Headers {
+				// Don't override Content-Type if we just set it for multipart, 
+				// unless we want to allow user override (which might break multipart boundary)
+				if k == "Content-Type" && req.BodyType == "form-data" {
+					continue
+				}
 				httpReq.Header.Set(k, v)
 			}
 

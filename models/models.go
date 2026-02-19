@@ -17,6 +17,7 @@ type RaceRequest struct {
 	Payload       map[string]any    `json:"payload"`
 	Headers       map[string]string `json:"headers"`
 	Authorization string            `json:"authorization"`
+	BodyType      string            `json:"bodyType"` // "json" | "form-data"
 }
 
 type RaceResult struct {
